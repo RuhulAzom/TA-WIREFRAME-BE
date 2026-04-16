@@ -1,0 +1,131 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Tipe_Tanaman {
+  TOMAT
+  ALPUKAT
+  SAWI
+}
+
+model User {
+  id       String @id @default(uuid())
+  email    String @unique
+  username String
+  password String
+
+  Pivot_Kebun_User Pivot_Kebun_User[]
+
+  @@map("user")
+}
+
+model Kebun {
+  id         String       @id @default(uuid())
+  nama_kebun String
+  tipe_kebun Tipe_Tanaman
+
+  Pivot_Kebun_User Pivot_Kebun_User[]
+
+  Alat        Alat[]
+  Sensor_Data Sensor_Data[]
+  Notifikasi  Notifikasi[]
+
+  @@map("kebun")
+}
+
+model Pivot_Kebun_User {
+  id       String      @id @default(uuid())
+  kebun_id String
+  user_id  String
+  tipe     Tipe_Access
+
+  Kebun Kebun @relation(fields: [kebun_id], references: [id], onDelete: Cascade)
+  User  User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([kebun_id, user_id])
+  @@map("pivot_kebun_user")
+}
+
+enum Tipe_Access {
+  OWNER
+  PEKERJA
+}
+
+model Alat {
+  id        String       @id @default(uuid())
+  nama_alat String
+  tipe_alat Tipe_Tanaman
+
+  kebun_id String
+
+  Kebun Kebun @relation(fields: [kebun_id], references: [id], onDelete: Cascade)
+
+  Sensor_Data Sensor_Data[]
+
+  @@map("alat")
+}
+
+model Sensor_Data {
+  id                String   @id @default(uuid())
+  waktu_pengambilan DateTime
+  suhu_udara        Float?
+  kelembaban_udara  Float?
+  suhu_tanah        Float?
+  kelembaban_tanah  Float?
+  intensitas_cahaya Float?
+
+  image      String?
+  tanaman_ke Int?
+  bedeng_ke  Int?
+
+  kebun_id String
+  alat_id  String
+
+  Alat  Alat  @relation(fields: [alat_id], references: [id], onDelete: Cascade)
+  Kebun Kebun @relation(fields: [kebun_id], references: [id], onDelete: Cascade)
+
+  @@map("sensor_data")
+}
+
+model Notifikasi {
+  id                     String @id @default(uuid())
+  judul                  String
+  deskripsi              String @db.Text()
+  resiko_penyakit        String @db.Text()
+  persentase_resiko      Float?
+  kemungkinan_penyebab   String @db.Text()
+  rekomendasi_pencegahan String @db.Text()
+
+  buzzer_status Boolean?
+  image         String?
+
+  analisis_mulai    DateTime?
+  analisis_berakhir DateTime?
+
+  kebun_id String
+
+  status_notifikasi Status_Notifikasi @default(AKTIF)
+
+  Kebun Kebun @relation(fields: [kebun_id], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@map("notifikasi")
+}
+
+enum Status_Notifikasi {
+  AKTIF
+  SELESAI
+}
