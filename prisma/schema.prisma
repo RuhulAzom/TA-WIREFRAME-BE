@@ -125,6 +125,17 @@ model Notifikasi {
   @@map("notifikasi")
 }
 
+model Notifikasi_Worker {
+  id             String    @id @default(uuid())
+  userId         String
+  endpoint       String
+  expirationTime DateTime?
+  p256dh         String
+  auth           String
+
+  @@map("notifikasi_worker")
+}
+
 enum Status_Notifikasi {
   AKTIF
   SELESAI

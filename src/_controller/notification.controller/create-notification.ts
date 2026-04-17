@@ -16,6 +16,7 @@ import { getUserSession } from "../../utils/user";
 import { th } from "zod/v4/locales";
 import { spawn } from "child_process";
 import path from "path";
+import webpush from "web-push";
 
 const MainSchema = z.object({
   plant: z.nativeEnum(Tipe_Tanaman),
@@ -105,13 +106,13 @@ const saveAlpukatData = async (req: Request) => {
     }
   })
 
-  const antraknosa = await scanAntraknosa(sensorData[0].kebun_id, averageData)
+  const antraknosa = await scanAntraknosa(req, sensorData[0].kebun_id, averageData)
 
   return { antraknosa }
 
 };
 
-const scanAntraknosa = async (kebun_id: string, averageData: {
+const scanAntraknosa = async (req: Request, kebun_id: string, averageData: {
   suhu_udara: number;
   kelembaban_udara: number;
   suhu_tanah: number;
@@ -120,6 +121,13 @@ const scanAntraknosa = async (kebun_id: string, averageData: {
   startDate: Date;
   endDate: Date;
 }[]) => {
+
+  const session = getUserSession(req);
+
+  if (!session) throw throwError(401, "Tidak terautentikasi");
+
+
+
   const antraknosa: {
     risk_prediction: number;
     startDate: Date;
@@ -148,7 +156,7 @@ const scanAntraknosa = async (kebun_id: string, averageData: {
     }
   }
 
-  await prisma.notifikasi.create({
+  const notif = await prisma.notifikasi.create({
     data: {
       judul: "Antraknosa",
       deskripsi: "Penyakit ini disebabkan karena cuaca yang lembab dan hangat, yang menciptakan kondisi ideal untuk pertumbuhan jamur. Antraknosa dapat menyebabkan bercak pada daun, batang, dan buah, yang akhirnya dapat menyebabkan kerusakan serius pada tanaman alpukat jika tidak ditangani dengan benar.",
@@ -196,6 +204,16 @@ const scanAntraknosa = async (kebun_id: string, averageData: {
       analisis_mulai: highestRisk.startDate,
       analisis_berakhir: highestRisk.endDate,
     }
+  })
+
+
+
+  await sendPushNotification({
+    userId: getUserSession(req)?.id || "",
+    title: "Notifikasi Penyakit Tanaman",
+    desc: "Penyakit ini disebabkan karena cuaca yang lembab dan hangat, yang menciptakan kondisi ideal untuk pertumbuhan jamur. Antraknosa dapat menyebabkan bercak pada daun, batang, dan buah, yang akhirnya dapat menyebabkan kerusakan serius pada tanaman alpukat jika tidak ditangani dengan benar.",
+    icon: `${env.FE_URL}/icon.png`,
+    url: `${env.FE_URL}/alerts/${notif.id}`,
   })
 
   // await prisma.$transaction(async (prisma) => {
@@ -330,4 +348,62 @@ const runSubProcess = async (model: "antraknosa.keras", inputDataPredict: Array<
   }
 }
 
+
+const sendPushNotification = async ({
+  userId,
+  desc,
+  url,
+  icon,
+  title
+}: {
+  userId: string,
+  title: string,
+  desc: string,
+  icon: string,
+  url: string,
+
+}) => {
+  try {
+    const subscriptions = await prisma.notifikasi_Worker.findMany({
+      where: { userId },
+    })
+    let notificationPayload = {
+      title,
+      body: desc,
+      icon,
+      data: {
+        url,
+      },
+    };
+    for (const subscription of subscriptions) {
+      const index = subscriptions.indexOf(subscription);
+      const payload = {
+        endpoint: subscription.endpoint,
+        expirationTime: subscription.expirationTime ? subscription.expirationTime.getTime() : null,
+        keys: {
+          p256dh: subscription.p256dh,
+          auth: subscription.auth,
+        },
+      };
+      console.log(
+        {
+          payload, notificationPayload
+        }
+      )
+      webpush.sendNotification(payload, JSON.stringify(notificationPayload))
+        .catch(async (err) => {
+          if (err.statusCode === 410 || err.statusCode === 404) {
+            console.warn(
+              `Subscription ${index} expired/not found (${err.statusCode}). Removing...`,
+            );
+            await prisma.notifikasi_Worker.delete({
+              where: { id: subscription.id },
+            })
+          }
+        })
+    }
+  } catch (error) {
+    console.log("Notif Error")
+  }
+}
 

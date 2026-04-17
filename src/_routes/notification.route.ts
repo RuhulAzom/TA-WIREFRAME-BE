@@ -12,6 +12,9 @@ NotificationRouter.put("/status", isAuthenticated, Controller.updateNotification
 NotificationRouter.get("/detail", isAuthenticated, Controller.getNotificationDetail);
 NotificationRouter.get("/count", isAuthenticated, Controller.getNotificationCount);
 
+NotificationRouter.post("/worker", Controller.createNotificationWorker);
+NotificationRouter.put("/worker", Controller.sendNotificationWorker);
+
 
 
 
